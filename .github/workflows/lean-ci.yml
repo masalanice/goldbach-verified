@@ -1,0 +1,28 @@
+name: lean-ci
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install elan
+        run: |
+          curl -sSfL https://release.lean-lang.org/lean4/elan/install.sh | sh -s -- -y
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: lake build
+        run: lake build
+      - name: sorry gate
+        run: |
+          NEW_SORRIES=$(git diff origin/master...HEAD -- '*.lean' | grep -c '^\+.*sorry' || true)
+          if [ "$NEW_SORRIES" -gt 0 ]; then
+            echo "PR introduces new sorry placeholders"; exit 1
+          fi
+      - name: axiom gate
+        run: |
+          echo '#print axioms GoldbachVerified.Sieve.selbergWeight_eq_zero_of_gt' >> AxiomCheck.lean
+          lake env lean AxiomCheck.lean 2>&1 | grep -q "sorryAx" && { echo "sorryAx present"; exit 1; } || echo "clean"
